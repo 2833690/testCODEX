@@ -18,12 +18,26 @@ def main(steps: int = 20) -> None:
     strategy = build_strategy(settings.strategy.name)
     service = build_bot_service(settings=settings, exchange=exchange, strategy=strategy)
     job = PaperTradingJob(service)
-    logger.info("paper_job_start", steps=steps, strategy=strategy.name)
+    logger.info("paper_job_start", steps=steps, strategy=strategy.name, symbol=settings.strategy.symbol)
     for _ in range(steps):
         result = job.start(steps=1)[0]
-        logger.info("paper_step", cash=result["cash"], equity=result["equity"], outcome=str(result["outcome"]))
+        signal = result.get("signal")
+        logger.info(
+            "paper_step",
+            cash=result["cash"],
+            equity=result["equity"],
+            regime=result.get("regime"),
+            volatility_pct=result.get("volatility_pct"),
+            signal_type=getattr(signal, "signal_type", None),
+            outcome=str(result["outcome"]),
+        )
         time.sleep(0.01)
-    logger.info("paper_job_done", trades=len(service.execution.paper_broker.portfolio.trades))
+    logger.info(
+        "paper_job_done",
+        trades=len(service.execution.paper_broker.portfolio.trades),
+        realized_pnl=service.execution.paper_broker.portfolio.realized_pnl,
+        max_drawdown=service.execution.paper_broker.portfolio.max_drawdown,
+    )
 
 
 if __name__ == "__main__":

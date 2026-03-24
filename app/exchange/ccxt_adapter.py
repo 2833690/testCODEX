@@ -21,9 +21,11 @@ class CcxtExchangeAdapter(ExchangeAdapter):
         exchange_name: str,
         api_key: str | None = None,
         api_secret: str | None = None,
-        retries: int = 3,
+        retries: int = 4,
         retry_delay_seconds: float = 1.0,
     ) -> None:
+        if not hasattr(ccxt, exchange_name):
+            raise ValueError(f"Unsupported ccxt exchange: {exchange_name}")
         exchange_cls = getattr(ccxt, exchange_name)
         self.client = exchange_cls(
             {
@@ -41,10 +43,10 @@ class CcxtExchangeAdapter(ExchangeAdapter):
             attempt += 1
             try:
                 return fn()
-            except (ccxt.NetworkError, ccxt.RequestTimeout) as exc:
+            except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.DDoSProtection, ccxt.RateLimitExceeded) as exc:
                 if attempt >= self.retries:
                     raise RetryableExchangeError(str(exc)) from exc
-                time.sleep(self.retry_delay_seconds)
+                time.sleep(self.retry_delay_seconds * attempt)
 
     def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 200) -> list[Candle]:
         raw = self._run_with_retry(lambda: self.client.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit))
@@ -78,6 +80,9 @@ class CcxtExchangeAdapter(ExchangeAdapter):
         cost = float(o.get("cost") or 0.0)
         avg = float(o.get("average") or (cost / filled if filled else 0.0))
         fee = o.get("fee", {}) or {}
+        status = "filled" if o.get("status") == "closed" else "partial"
+        if o.get("status") in {"canceled", "rejected"}:
+            status = "rejected"
         return OrderResult(
             order_id=str(o.get("id")),
             symbol=request.symbol,
@@ -85,7 +90,7 @@ class CcxtExchangeAdapter(ExchangeAdapter):
             quantity=filled,
             average_price=avg,
             fee_paid=float(fee.get("cost") or 0.0),
-            status="filled" if o.get("status") == "closed" else "partial",
+            status=status,
         )
 
     def fetch_order(self, order_id: str, symbol: str) -> OrderResult:

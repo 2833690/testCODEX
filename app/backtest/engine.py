@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from app.config.settings import AppSettings
 from app.execution.engine import ExecutionEngine
 from app.models.market import Candle, MarketSnapshot
-from app.models.trading import StrategyContext
+from app.models.trading import StrategyContext, StrategySignal
 from app.paper.broker import PaperBroker
 from app.risk.manager import RiskManager
 from app.strategies.base import Strategy
+from app.utils.regime import detect_regime, estimate_volatility_pct
 
 
 @dataclass
@@ -23,23 +24,52 @@ class BacktestEngine:
         self.settings = settings
         self.strategy = strategy
 
+    def _snapshot_from_candle(self, symbol: str, candle: Candle) -> MarketSnapshot:
+        half_spread = (self.settings.backtest.spread_bps / 10_000) / 2
+        bid = candle.open * (1 - half_spread)
+        ask = candle.open * (1 + half_spread)
+        return MarketSnapshot(symbol=symbol, bid=bid, ask=ask, last=candle.open)
+
     def run(self, candles: list[Candle]) -> tuple[PaperBroker, list[float]]:
         paper = PaperBroker(self.settings.backtest.initial_cash, fee_rate=self.settings.backtest.fee_rate)
         risk = RiskManager(self.settings.risk)
         execution = ExecutionEngine(self.settings, paper, risk)
         equity_curve: list[float] = []
-        for i in range(30, len(candles)):
-            window = candles[: i + 1]
-            last = window[-1]
-            snapshot = MarketSnapshot(symbol=self.settings.strategy.symbol, bid=last.close * 0.9999, ask=last.close * 1.0001, last=last.close)
+        pending_signal: StrategySignal | None = None
+
+        warmup = 50
+        latency = self.settings.backtest.latency_bars
+
+        for i in range(warmup, len(candles)):
+            history = candles[: i + 1]
+            current = candles[i]
+            volatility_pct = estimate_volatility_pct(history)
+
+            if pending_signal is not None and i >= warmup + latency:
+                fill_candle = current
+                pre_fill_history = candles[:i]
+                snapshot = self._snapshot_from_candle(self.settings.strategy.symbol, fill_candle)
+                reference_volume = pre_fill_history[-1].volume if pre_fill_history else fill_candle.volume
+                dynamic_partial = min(1.0, max(0.2, reference_volume / 300.0))
+                execution.execute_signal(
+                    signal=pending_signal,
+                    market=snapshot,
+                    candles=pre_fill_history,
+                    volatility_pct=estimate_volatility_pct(pre_fill_history),
+                    partial_fill_ratio=min(dynamic_partial, self.settings.backtest.partial_fill_ratio),
+                )
+                pending_signal = None
+
             context = StrategyContext(
                 has_position=any(p.symbol == self.settings.strategy.symbol for p in paper.portfolio.open_positions),
                 consecutive_losses=execution.risk_state.consecutive_losses,
+                bars_since_loss=execution.risk_state.bars_since_loss,
+                regime=detect_regime(history),
+                volatility_pct=volatility_pct,
                 metadata={"symbol": self.settings.strategy.symbol},
             )
-            signal = self.strategy.generate_signal(window, context)
-            execution.execute_signal(signal, snapshot, window)
-            equity_curve.append(paper.portfolio.update_equity(last.close))
+            pending_signal = self.strategy.generate_signal(history, context)
+            equity_curve.append(paper.portfolio.update_equity(current.close))
         return paper, equity_curve
 
 

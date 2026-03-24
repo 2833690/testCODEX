@@ -6,6 +6,7 @@ from typing import Literal
 
 Side = Literal["buy", "sell"]
 SignalType = Literal["entry", "exit", "hold"]
+Regime = Literal["bull", "bear", "sideways", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -72,4 +73,7 @@ class RiskDecision:
 class StrategyContext:
     has_position: bool
     consecutive_losses: int = 0
-    metadata: dict[str, float] = field(default_factory=dict)
+    bars_since_loss: int = 9999
+    regime: Regime = "unknown"
+    volatility_pct: float = 0.0
+    metadata: dict[str, float | str] = field(default_factory=dict)
