@@ -36,3 +36,23 @@
 - Prefer realistic research quality over flashy strategy complexity.
 - Do not approve strategies based only on raw return; emphasize drawdown, expectancy, stability, and robustness.
 - Update README when assumptions or runtime behavior change.
+
+- ## Product goals
+- Build a trading research and signal platform, not a hype bot.
+- Prioritize backtesting realism, paper trading correctness, and operator clarity.
+- Signals must be explainable and persisted.
+- Risk validation is mandatory before execution.
+- Prefer robust risk-adjusted performance over raw return.
+
+## Safety defaults
+- Live trading disabled by default.
+- No real keys in tests.
+- No hidden assumptions about profitability.
+- Account for fees, slippage, and realistic execution constraints.
+
+## Engineering rules
+- Keep strategies pure and testable.
+- Keep exchange adapters isolated.
+- Update README when behavior changes.
+- Run tests after major changes.
+- Use small, reviewable commits.
