@@ -73,3 +73,21 @@ def test_daily_loss_limit_uses_day_start_equity() -> None:
     decision = manager.approve(signal, market, [], equity=9_000, peak_equity=10_000, open_positions=[], risk_state=state)
     assert not decision.approved
     assert decision.reason == "daily_loss_limit"
+
+
+def test_daily_loss_resets_on_new_day_boundary() -> None:
+    manager = RiskManager(RiskSettings(max_daily_loss_pct=0.02))
+    market = MarketSnapshot(symbol="BTC/USDT", bid=100, ask=100.01, last=100)
+    signal = StrategySignal(symbol="BTC/USDT", side="buy", signal_type="entry", confidence=0.8, stop_loss=99)
+    state = RiskState(daily_pnl=-250, day_start_equity=10_000, current_day=10, day_start_realized_pnl=0)
+    decision = manager.approve(
+        signal,
+        market,
+        [],
+        equity=9_900,
+        peak_equity=10_000,
+        open_positions=[],
+        risk_state=state,
+        current_day=11,
+    )
+    assert decision.approved

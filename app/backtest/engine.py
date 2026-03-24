@@ -35,7 +35,7 @@ class BacktestEngine:
         risk = RiskManager(self.settings.risk)
         execution = ExecutionEngine(self.settings, paper, risk)
         equity_curve: list[float] = []
-        pending_signal: StrategySignal | None = None
+        pending_signals: list[tuple[int, StrategySignal]] = []
 
         warmup = 50
         latency = self.settings.backtest.latency_bars
@@ -45,20 +45,21 @@ class BacktestEngine:
             current = candles[i]
             volatility_pct = estimate_volatility_pct(history)
 
-            if pending_signal is not None and i >= warmup + latency:
+            matured_signals = [item for item in pending_signals if item[0] <= i]
+            pending_signals = [item for item in pending_signals if item[0] > i]
+            for _, matured_signal in matured_signals:
                 fill_candle = current
                 pre_fill_history = candles[:i]
                 snapshot = self._snapshot_from_candle(self.settings.strategy.symbol, fill_candle)
                 reference_volume = pre_fill_history[-1].volume if pre_fill_history else fill_candle.volume
                 dynamic_partial = min(1.0, max(0.2, reference_volume / 300.0))
                 execution.execute_signal(
-                    signal=pending_signal,
+                    signal=matured_signal,
                     market=snapshot,
                     candles=pre_fill_history,
                     volatility_pct=estimate_volatility_pct(pre_fill_history),
                     partial_fill_ratio=min(dynamic_partial, self.settings.backtest.partial_fill_ratio),
                 )
-                pending_signal = None
 
             context = StrategyContext(
                 has_position=any(p.symbol == self.settings.strategy.symbol for p in paper.portfolio.open_positions),
@@ -68,7 +69,9 @@ class BacktestEngine:
                 volatility_pct=volatility_pct,
                 metadata={"symbol": self.settings.strategy.symbol},
             )
-            pending_signal = self.strategy.generate_signal(history, context)
+            next_signal = self.strategy.generate_signal(history, context)
+            if next_signal.signal_type in {"entry", "exit"}:
+                pending_signals.append((i + latency, next_signal))
             equity_curve.append(paper.portfolio.update_equity(current.close))
         return paper, equity_curve
 

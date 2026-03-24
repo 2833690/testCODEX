@@ -13,6 +13,8 @@ class RiskState:
     consecutive_losses: int = 0
     bars_since_loss: int = 9999
     day_start_equity: float = 0.0
+    current_day: int | None = None
+    day_start_realized_pnl: float = 0.0
 
 
 class RiskManager:
@@ -49,9 +51,14 @@ class RiskManager:
         open_positions: list[Position],
         risk_state: RiskState,
         volatility_pct: float = 0.0,
+        current_day: int | None = None,
     ) -> RiskDecision:
         if signal.signal_type != "entry":
             return RiskDecision(approved=True, size=0.0)
+        if current_day is not None and risk_state.current_day != current_day:
+            risk_state.current_day = current_day
+            risk_state.day_start_equity = equity
+            risk_state.day_start_realized_pnl = risk_state.daily_pnl
         if risk_state.day_start_equity <= 0:
             risk_state.day_start_equity = equity
 
@@ -73,7 +80,8 @@ class RiskManager:
             return RiskDecision(approved=False, reason="max_concurrent_positions")
 
         daily_loss_limit = risk_state.day_start_equity * self.settings.max_daily_loss_pct
-        if risk_state.daily_pnl < -daily_loss_limit:
+        session_pnl = risk_state.daily_pnl - risk_state.day_start_realized_pnl
+        if session_pnl < -daily_loss_limit:
             return RiskDecision(approved=False, reason="daily_loss_limit")
 
         if (

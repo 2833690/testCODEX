@@ -42,3 +42,21 @@ def test_protective_stop_exits_position() -> None:
 
     assert len(broker.portfolio.open_positions) == 0
     assert len(broker.portfolio.trades) >= 1
+
+
+def test_entry_uses_ask_and_exit_uses_bid() -> None:
+    settings = AppSettings()
+    broker = PaperBroker(initial_cash=10_000, fee_rate=settings.backtest.fee_rate)
+    engine = ExecutionEngine(settings, broker, RiskManager(settings.risk))
+    market = MarketSnapshot(symbol=settings.strategy.symbol, bid=99.0, ask=101.0, last=100.0)
+    candle = Candle(timestamp=1, open=100, high=102, low=99, close=100, volume=100)
+
+    entry = StrategySignal(symbol=settings.strategy.symbol, side="buy", signal_type="entry", confidence=0.9, stop_loss=95)
+    engine.execute_signal(entry, market, [candle], volatility_pct=0.01)
+    pos = broker.portfolio.open_positions[0]
+    assert pos.entry_price >= market.ask
+
+    exit_signal = StrategySignal(symbol=settings.strategy.symbol, side="sell", signal_type="exit", confidence=0.9)
+    engine.execute_signal(exit_signal, market, [candle], volatility_pct=0.01)
+    trade = broker.portfolio.trades[-1]
+    assert trade.exit_price <= market.bid

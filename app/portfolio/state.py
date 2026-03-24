@@ -19,13 +19,13 @@ class PortfolioState:
         return sum(t.pnl for t in self.trades)
 
     def update_equity(self, mark_price: float) -> float:
-        unrealized = 0.0
+        position_market_value = 0.0
         for pos in self.open_positions:
             if pos.side == "buy":
-                unrealized += (mark_price - pos.entry_price) * pos.quantity
+                position_market_value += mark_price * pos.quantity
             else:
-                unrealized += (pos.entry_price - mark_price) * pos.quantity
-        equity = self.cash + unrealized
+                position_market_value += (2 * pos.entry_price - mark_price) * pos.quantity
+        equity = self.cash + position_market_value
         self.equity_curve.append(equity)
         if equity > self.peak_equity:
             self.peak_equity = equity
