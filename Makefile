@@ -1,7 +1,8 @@
 .PHONY: install test api paper backtest
 
 install:
-	pip install -e .[dev]
+	pip install -e .
+	pip install -e ".[dev]"
 
 test:
 	pytest
