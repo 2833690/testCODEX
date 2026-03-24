@@ -26,3 +26,13 @@
 - Default mode is paper trading.
 - No real exchange access in tests.
 - Reject trades when risk constraints fail.
+
+## Review guidelines
+
+- Treat lookahead bias, data leakage, unrealistic fills, and missing fee/slippage modeling as P1.
+- Treat missing stop-loss enforcement, broken position sizing, and absent drawdown guards as P1.
+- Treat silent exception handling in execution, order state, and portfolio accounting as P1.
+- Prefer branch + PR workflow; never push directly to main.
+- Prefer realistic research quality over flashy strategy complexity.
+- Do not approve strategies based only on raw return; emphasize drawdown, expectancy, stability, and robustness.
+- Update README when assumptions or runtime behavior change.
