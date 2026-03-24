@@ -91,6 +91,14 @@ make backtest
 make api
 ```
 
+For local/CI test runs, install the package first and then test dependencies:
+
+```bash
+pip install -e .
+pip install -e ".[test]"
+pytest
+```
+
 ## Backtest and research workflow (safe default)
 
 1. Tune candidate parameters only on train+validation windows.
