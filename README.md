@@ -43,10 +43,14 @@ scripts/
 - **Lookahead bias**: backtest fills use next-bar style execution and configurable latency bars.
 - **Data leakage risk**: walk-forward folds are explicit and ordered by time.
 - **Unrealistic fills**: cost model includes spread, slippage, fees, and partial-fill constraints.
+- **Signal loss under latency**: pending signals are queued and executed only when their latency window matures (no overwrite on later bars).
 - **Fragile sizing**: risk manager uses volatility-targeted scaling and stop-distance validation.
 - **Weak risk brakes**: confidence threshold + cooldown-by-bars after consecutive losses.
 - **Mismatch between research and execution**: shared execution/risk path is used by backtest and paper flow.
 - Protective stop-loss/take-profit checks are applied on each new bar before signal processing.
+- **Accounting correctness**: portfolio equity now marks open positions to market value, and realized trade PnL includes both entry and exit fees.
+- **Cost realism**: execution prices apply bid/ask side selection (buy at ask, sell at bid), then slippage and fee modeling.
+- **Deterministic auditability**: backtest/paper fills use candle timestamps for trade records instead of wall-clock timestamps.
 
 ### Research-quality additions
 
@@ -120,6 +124,9 @@ Live execution remains intentionally stubbed and blocked unless explicitly enabl
 - No websocket streaming yet.
 - No persistent storage for fills/metrics runs.
 - No exchange min-lot and min-notional metadata validation from market specs yet.
+- Latency is modeled in bars, not milliseconds; microstructure-level queue position is not modeled.
+- Partial-fill model is heuristic and not yet based on order book depth snapshots.
+- Funding, borrow costs, and overnight financing are still not modeled.
 
 ## Next safe steps
 
@@ -135,4 +142,3 @@ Live execution remains intentionally stubbed and blocked unless explicitly enabl
 - **Safe for research:** Yes, with conservative assumptions and explicit overfitting warnings.
 - **Safe for paper trading:** Yes, for controlled dry runs; monitor diagnostics and rejected-trade logs.
 - **Not safe for live trading yet:** Yes. Missing exchange rule enforcement, persistent audit trail, and deeper market-impact/funding modeling.
-

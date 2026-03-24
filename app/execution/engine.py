@@ -42,6 +42,7 @@ class ExecutionEngine:
                 market_price=trigger_price,
                 slippage_bps=self.settings.backtest.slippage_bps,
                 partial_fill_ratio=1.0,
+                fill_timestamp_ms=last.timestamp,
             )
             self.logger.info("protective_exit", symbol=pos.symbol, reason=trigger_reason, status=result.status, price=trigger_price)
             if result.status == "rejected":
@@ -81,6 +82,7 @@ class ExecutionEngine:
                 open_positions=portfolio.open_positions,
                 risk_state=self.risk_state,
                 volatility_pct=volatility_pct,
+                current_day=(candles[-1].timestamp // 86_400_000) if candles else None,
             )
             if not decision.approved:
                 self.logger.info("entry_rejected", symbol=signal.symbol, reason=decision.reason)
@@ -89,9 +91,10 @@ class ExecutionEngine:
             req = OrderRequest(symbol=signal.symbol, side="buy", quantity=decision.size)
             result = self.paper_broker.place_market_order(
                 req,
-                market_price=market.last,
+                market_price=market.ask,
                 slippage_bps=self.settings.backtest.slippage_bps,
                 partial_fill_ratio=partial,
+                fill_timestamp_ms=candles[-1].timestamp if candles else None,
             )
             if result.status in {"filled", "partial"}:
                 open_pos = next((p for p in reversed(portfolio.open_positions) if p.symbol == signal.symbol), None)
@@ -109,9 +112,10 @@ class ExecutionEngine:
             req = OrderRequest(symbol=signal.symbol, side="sell", quantity=pos.quantity)
             result = self.paper_broker.place_market_order(
                 req,
-                market_price=market.last,
+                market_price=market.bid,
                 slippage_bps=self.settings.backtest.slippage_bps,
                 partial_fill_ratio=partial,
+                fill_timestamp_ms=candles[-1].timestamp if candles else None,
             )
             if portfolio.trades and portfolio.trades[-1].pnl < 0:
                 self.risk_state.consecutive_losses += 1

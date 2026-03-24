@@ -28,6 +28,7 @@ class Position:
     entry_price: float
     stop_loss: float | None
     take_profit: float | None
+    entry_fee_paid: float = 0.0
 
 
 @dataclass
