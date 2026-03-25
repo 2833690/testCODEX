@@ -67,19 +67,32 @@ scripts/
 
 - `GET /health`
 - `GET /config`
+- `GET /strategies`
 - `GET /strategy`
+- `GET /market/latest`
+- `GET /signals/latest`
+- `GET /signals/history`
+- `GET /signals/persisted`
 - `GET /paper/status`
+- `GET /paper/runs`
 - `GET /positions`
 - `GET /trades`
 - `GET /metrics`
 - `GET /diagnostics`
+- `GET /events/audit`
 - `POST /paper/start?steps=5`
 - `POST /paper/stop`
 - `POST /backtest/run`
+- `GET /backtest/results`
+- `GET /reports/backtests/export?format=json|csv`
 - `POST /backtest/compare`
+- `POST /research/split`
 - `POST /research/walk-forward`
 - `POST /research/sensitivity`
 - `POST /research/stability`
+
+All endpoints return dashboard-friendly envelopes:
+`{"status":"ok","message":"...","data":{...}}`.
 
 ## Quick start
 
@@ -107,6 +120,32 @@ pytest
 4. Review diagnostics (`payoff_ratio`, `ulcer_index`, drawdown duration).
 5. Run extended paper trading before any live-trading consideration.
 
+## Operator workflow (paper-first)
+
+1. Configure `.env` from `.env.example` and keep `TRADING__MODE=paper`.
+2. Run `make backtest` and review:
+   - risk-adjusted metrics,
+   - drawdown diagnostics,
+   - trade/streak distribution,
+   - regime performance breakdown.
+3. Run `make paper` and monitor:
+   - `/signals/latest`, `/signals/persisted`,
+   - `/diagnostics`,
+   - `/events/audit`.
+4. Export run history with `/reports/backtests/export?format=csv` for comparison.
+
+## Persistence and explainability
+
+- Runs, signals, trades, and execution audit events are persisted in SQLite (`STORAGE__SQLITE_PATH`).
+- Each entry/exit signal carries:
+  - strategy name,
+  - direction,
+  - confidence,
+  - key trigger features,
+  - stop-loss basis,
+  - invalidation condition,
+  - short human-readable explanation.
+
 ## Overfitting risk that still remains
 
 - Repeatedly testing many parameter combinations on the same historical sample can still overfit.
@@ -126,11 +165,19 @@ Live execution remains intentionally stubbed and blocked unless explicitly enabl
 - `TRADING__LIVE_TRADING_ENABLED=true`
 - `TRADING__MODE=live`
 
+### Mandatory pre-live validation checklist (not implemented as automatic approval)
+
+- Validate exchange lot/tick/min-notional enforcement against real market metadata.
+- Validate persistent order lifecycle reconciliation and recovery after restarts.
+- Validate kill-switch and circuit-breaker behavior in failure drills.
+- Validate timeout/retry behavior against exchange outage and partial connectivity.
+- Validate cost model assumptions (fees/slippage/spread/funding) on production-like data.
+- Validate capacity/impact limits and drawdown controls in prolonged paper runs.
+
 ## Limitations
 
 - Sample data feed is CSV simulation for deterministic development.
 - No websocket streaming yet.
-- No persistent storage for fills/metrics runs.
 - No exchange min-lot and min-notional metadata validation from market specs yet.
 - Latency is modeled in bars, not milliseconds; microstructure-level queue position is not modeled.
 - Partial-fill model is heuristic and not yet based on order book depth snapshots.
@@ -138,11 +185,11 @@ Live execution remains intentionally stubbed and blocked unless explicitly enabl
 
 ## Next safe steps
 
-1. Add persistent run storage and experiment tracking.
-2. Add exchange market-rule validation (lot size, tick size, min notional).
-3. Add live feed health checks + stale data circuit breaker.
-4. Add larger multi-symbol historical datasets with strict train/validation/test protocol.
-5. Add capacity/impact stress tests before live deployment.
+1. Add exchange market-rule validation (lot size, tick size, min notional).
+2. Add live feed health checks + stale data circuit breaker.
+3. Add larger multi-symbol historical datasets with strict train/validation/test protocol.
+4. Add capacity/impact stress tests before live deployment.
+5. Add richer trade-duration analytics from event-level data.
 
 
 ## Deployment readiness assessment

@@ -42,6 +42,8 @@ class BacktestSettings(BaseModel):
 class TradingSettings(BaseModel):
     mode: Literal["paper", "live"] = "paper"
     live_trading_enabled: bool = False
+    kill_switch_enabled: bool = True
+    circuit_breaker_failures: int = Field(default=3, ge=1, le=20)
 
     @model_validator(mode="after")
     def validate_live_mode(self) -> "TradingSettings":
@@ -54,6 +56,18 @@ class StrategySettings(BaseModel):
     name: Literal["ema_crossover", "mean_reversion", "breakout"] = "ema_crossover"
     timeframe: str = "1m"
     symbol: str = "BTC/USDT"
+
+
+class StorageSettings(BaseModel):
+    sqlite_path: str = "var/trading_platform.db"
+    persist_signals: bool = True
+    persist_trades: bool = True
+    persist_runs: bool = True
+
+
+class ExecutionSettings(BaseModel):
+    order_timeout_seconds: float = Field(default=8.0, ge=1.0, le=120.0)
+    retry_attempts: int = Field(default=2, ge=0, le=10)
 
 
 class AppSettings(BaseSettings):
@@ -73,6 +87,15 @@ class AppSettings(BaseSettings):
     strategy: StrategySettings = StrategySettings()
     risk: RiskSettings = RiskSettings()
     backtest: BacktestSettings = BacktestSettings()
+    storage: StorageSettings = StorageSettings()
+    execution: ExecutionSettings = ExecutionSettings()
+
+    @model_validator(mode="after")
+    def validate_secret_requirements(self) -> "AppSettings":
+        if self.trading.mode == "live":
+            if not self.api_key or not self.api_secret:
+                raise ValueError("api_key and api_secret are required in live mode")
+        return self
 
 
 @lru_cache

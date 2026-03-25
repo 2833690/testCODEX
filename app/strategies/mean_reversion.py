@@ -26,7 +26,7 @@ class MeanReversionStrategy(Strategy):
         rv = rsi(closes, self.rsi_period)
         atr_value = atr(highs, lows, closes, 14)
         if mid is None or sd is None or rv is None:
-            return StrategySignal(symbol=symbol, side="buy", signal_type="hold", confidence=0.0, reason="insufficient_data")
+            return StrategySignal(symbol=symbol, strategy_name=self.name, side="buy", signal_type="hold", confidence=0.0, reason="insufficient_data")
 
         lower = mid - 2 * sd
         upper = mid + 2 * sd
@@ -38,7 +38,30 @@ class MeanReversionStrategy(Strategy):
 
         if price < lower and rv <= self.rsi_buy and not context.has_position:
             stop = price - (atr_value * 1.2 if atr_value else price * 0.015)
-            return StrategySignal(symbol=symbol, side="buy", signal_type="entry", confidence=confidence, stop_loss=stop, reason="oversold_band")
+            return StrategySignal(
+                symbol=symbol,
+                strategy_name=self.name,
+                side="buy",
+                signal_type="entry",
+                confidence=confidence,
+                stop_loss=stop,
+                reason="oversold_band",
+                key_features={"rsi": round(rv, 4), "lower_band": round(lower, 4), "price": round(price, 4)},
+                stop_loss_basis="1.2x ATR below entry",
+                invalidation_condition="price fails to mean-revert and breaks lower volatility support",
+                explanation="Price is below lower Bollinger band with oversold RSI; enter mean-reversion long.",
+            )
         if (price > upper or rv >= self.rsi_sell) and context.has_position:
-            return StrategySignal(symbol=symbol, side="sell", signal_type="exit", confidence=confidence, reason="reversion_exit")
-        return StrategySignal(symbol=symbol, side="buy", signal_type="hold", confidence=0.0, reason="no_setup")
+            return StrategySignal(
+                symbol=symbol,
+                strategy_name=self.name,
+                side="sell",
+                signal_type="exit",
+                confidence=confidence,
+                reason="reversion_exit",
+                key_features={"rsi": round(rv, 4), "upper_band": round(upper, 4), "price": round(price, 4)},
+                stop_loss_basis="N/A (exit signal)",
+                invalidation_condition="fresh oversold setup appears with no open position",
+                explanation="Mean-reversion target reached or RSI overbought; exit long.",
+            )
+        return StrategySignal(symbol=symbol, strategy_name=self.name, side="buy", signal_type="hold", confidence=0.0, reason="no_setup")
