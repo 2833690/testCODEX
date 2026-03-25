@@ -27,3 +27,8 @@ def test_risk_drawdown_validation() -> None:
 def test_notional_bounds_validation() -> None:
     with pytest.raises(ValueError):
         AppSettings(risk={"min_notional": 100, "max_notional": 50})
+
+
+def test_live_mode_requires_secrets() -> None:
+    with pytest.raises(ValueError):
+        AppSettings(trading={"mode": "live", "live_trading_enabled": True}, api_key=None, api_secret=None)

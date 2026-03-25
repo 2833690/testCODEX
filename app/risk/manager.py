@@ -34,11 +34,17 @@ class RiskManager:
             vol_scale = min(1.0, self.settings.target_volatility_pct / volatility_pct)
             size *= max(0.2, vol_scale)
 
+        # Keep a small execution-cost buffer so paper orders remain affordable
+        # after spread/slippage/fee adjustments in execution simulation.
+        affordability_buffer = 1.003
+        max_affordable_notional = equity / affordability_buffer if affordability_buffer > 0 else equity
         notional = size * entry
         if notional < self.settings.min_notional:
             return 0.0
         if notional > self.settings.max_notional:
             size = self.settings.max_notional / entry
+        if size * entry > max_affordable_notional:
+            size = max_affordable_notional / entry
         return max(size, 0.0)
 
     def approve(

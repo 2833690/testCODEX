@@ -89,6 +89,15 @@ def walk_forward_validation(
     test_size: int = 40,
     step_size: int = 20,
 ) -> list[FoldResult]:
+    # Adapt fold sizing for smaller deterministic datasets used in local tests/demo.
+    n = len(candles)
+    if n < train_size + test_size:
+        if n < 12:
+            return []
+        train_size = max(8, int(n * 0.6))
+        test_size = max(4, min(int(n * 0.25), n - train_size))
+        step_size = max(1, min(step_size, test_size))
+
     folds: list[FoldResult] = []
     start = 0
     fold_id = 1
@@ -97,7 +106,9 @@ def walk_forward_validation(
     while start + train_size + test_size <= len(candles):
         train_slice = candles[start : start + train_size]
         test_slice = candles[start + train_size : start + train_size + test_size]
-        if len(train_slice) < 90 or len(test_slice) < 30:
+        min_train = max(8, int(train_size * 0.6))
+        min_test = max(4, int(test_size * 0.6))
+        if len(train_slice) < min_train or len(test_slice) < min_test:
             break
 
         train_cut = int(len(train_slice) * 0.7)

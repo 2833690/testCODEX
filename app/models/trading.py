@@ -15,9 +15,14 @@ class StrategySignal:
     side: Side
     signal_type: SignalType
     confidence: float
+    strategy_name: str = "unknown"
     stop_loss: float | None = None
     take_profit: float | None = None
     reason: str = ""
+    key_features: dict[str, float | str] = field(default_factory=dict)
+    stop_loss_basis: str = ""
+    invalidation_condition: str = ""
+    explanation: str = ""
 
 
 @dataclass
