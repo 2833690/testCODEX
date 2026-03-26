@@ -4,27 +4,28 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reliable-crypto-bot"
-version = "0.1.0"
-description = "Production-minded crypto trading bot with paper trading, backtesting, and API observability"
+version = "0.2.0"
+description = "Локальная платформа исследования, бэктеста и paper trading крипто-стратегий"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
   "ccxt>=4.4.0",
   "fastapi>=0.115.0",
   "pandas>=2.2.0",
+  "numpy>=2.1.0",
+  "plotly>=5.24.0",
+  "streamlit>=1.40.0",
+  "pyarrow>=18.0.0",
   "uvicorn>=0.32.0",
   "pydantic>=2.10.0",
   "pydantic-settings>=2.6.0",
+  "PyYAML>=6.0.2",
   "structlog>=24.4.0"
 ]
 
 [project.optional-dependencies]
-test = [
-  "pytest>=8.3.0"
-]
-dev = [
-  "pytest>=8.3.0"
-]
+test = ["pytest>=8.3.0"]
+dev = ["pytest>=8.3.0", "ruff>=0.8.0", "black>=24.10.0", "mypy>=1.13.0"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -32,4 +33,5 @@ addopts = "-q"
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "ui*"]
+from = "."

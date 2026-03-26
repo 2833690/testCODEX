@@ -1,167 +1,153 @@
 from __future__ import annotations
 
+import csv
 import json
-import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
-class SqliteRepository:
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+class LocalFileRepository:
+    """Файловое хранилище событий/сигналов/сделок без внешней БД."""
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def __init__(self, storage_dir: str = "storage") -> None:
+        self.storage_dir = Path(storage_dir)
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self._json_files = {
+            "runs": self.storage_dir / "runs.jsonl",
+            "signals": self.storage_dir / "signals.jsonl",
+            "trades": self.storage_dir / "trades.jsonl",
+            "events": self.storage_dir / "events.jsonl",
+        }
+        self._csv_files = {
+            "runs": self.storage_dir / "runs.csv",
+            "signals": self.storage_dir / "signals.csv",
+            "trades": self.storage_dir / "trades.csv",
+            "events": self.storage_dir / "events.csv",
+        }
+        self._counters_path = self.storage_dir / "counters.json"
+        self._ensure_files()
 
-    def _init_db(self) -> None:
-        with self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_type TEXT NOT NULL,
-                    strategy TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    timeframe TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    payload_json TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS signals (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    strategy TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    timeframe TEXT NOT NULL,
-                    signal_type TEXT NOT NULL,
-                    side TEXT NOT NULL,
-                    confidence REAL NOT NULL,
-                    reason TEXT NOT NULL,
-                    explanation TEXT NOT NULL,
-                    key_features_json TEXT NOT NULL,
-                    stop_loss REAL,
-                    take_profit REAL,
-                    stop_loss_basis TEXT NOT NULL,
-                    invalidation_condition TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS trades (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT NOT NULL,
-                    side TEXT NOT NULL,
-                    quantity REAL NOT NULL,
-                    entry_price REAL NOT NULL,
-                    exit_price REAL NOT NULL,
-                    pnl REAL NOT NULL,
-                    fee REAL NOT NULL,
-                    timestamp_ms INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS execution_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_type TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    details_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
+    def _ensure_files(self) -> None:
+        for path in list(self._json_files.values()) + list(self._csv_files.values()):
+            if not path.exists():
+                path.touch()
+        if not self._counters_path.exists():
+            self._counters_path.write_text(json.dumps({"runs": 0, "signals": 0, "trades": 0, "events": 0}))
+
+    def _next_id(self, key: str) -> int:
+        counters = json.loads(self._counters_path.read_text())
+        counters[key] += 1
+        self._counters_path.write_text(json.dumps(counters))
+        return int(counters[key])
+
+    @staticmethod
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _append_jsonl(path: Path, row: dict[str, Any]) -> None:
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    @staticmethod
+    def _append_csv(path: Path, row: dict[str, Any]) -> None:
+        existing_header = path.read_text(encoding="utf-8").splitlines()[0] if path.stat().st_size > 0 else None
+        with path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if existing_header is None:
+                writer.writeheader()
+            writer.writerow(row)
+
+    @staticmethod
+    def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+        return rows
 
     def save_run(self, run_type: str, strategy: str, symbol: str, timeframe: str, payload: dict[str, Any]) -> int:
-        with self._connect() as conn:
-            cur = conn.execute(
-                "INSERT INTO runs(run_type, strategy, symbol, timeframe, payload_json) VALUES (?, ?, ?, ?, ?)",
-                (run_type, strategy, symbol, timeframe, json.dumps(payload)),
-            )
-            return int(cur.lastrowid)
+        row = {
+            "id": self._next_id("runs"),
+            "run_type": run_type,
+            "strategy": strategy,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "created_at": self._now_iso(),
+            "payload": payload,
+        }
+        self._append_jsonl(self._json_files["runs"], row)
+        self._append_csv(self._csv_files["runs"], {**row, "payload": json.dumps(payload, ensure_ascii=False)})
+        return int(row["id"])
 
     def list_runs(self, run_type: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
-        q = "SELECT * FROM runs"
-        params: list[Any] = []
+        rows = self._read_jsonl(self._json_files["runs"])
         if run_type:
-            q += " WHERE run_type = ?"
-            params.append(run_type)
-        q += " ORDER BY id DESC LIMIT ?"
-        params.append(limit)
-        with self._connect() as conn:
-            rows = conn.execute(q, params).fetchall()
-        return [self._row_with_payload(r) for r in rows]
+            rows = [r for r in rows if r["run_type"] == run_type]
+        return rows[-max(1, limit) :][::-1]
 
     def save_signal(self, payload: dict[str, Any], timeframe: str) -> int:
-        with self._connect() as conn:
-            cur = conn.execute(
-                """
-                INSERT INTO signals(strategy, symbol, timeframe, signal_type, side, confidence, reason, explanation,
-                    key_features_json, stop_loss, take_profit, stop_loss_basis, invalidation_condition)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    payload.get("strategy_name", "unknown"),
-                    payload["symbol"],
-                    timeframe,
-                    payload["signal_type"],
-                    payload["side"],
-                    float(payload["confidence"]),
-                    payload.get("reason", ""),
-                    payload.get("explanation", ""),
-                    json.dumps(payload.get("key_features", {})),
-                    payload.get("stop_loss"),
-                    payload.get("take_profit"),
-                    payload.get("stop_loss_basis", ""),
-                    payload.get("invalidation_condition", ""),
-                ),
-            )
-            return int(cur.lastrowid)
+        row = {
+            "id": self._next_id("signals"),
+            "strategy": payload.get("strategy_name", "unknown"),
+            "symbol": payload["symbol"],
+            "timeframe": timeframe,
+            "signal_type": payload["signal_type"],
+            "side": payload["side"],
+            "confidence": float(payload.get("confidence", 0.0)),
+            "reason": payload.get("reason", ""),
+            "explanation": payload.get("explanation", ""),
+            "key_features": payload.get("key_features", {}),
+            "stop_loss": payload.get("stop_loss"),
+            "take_profit": payload.get("take_profit"),
+            "stop_loss_basis": payload.get("stop_loss_basis", ""),
+            "invalidation_condition": payload.get("invalidation_condition", ""),
+            "created_at": self._now_iso(),
+        }
+        self._append_jsonl(self._json_files["signals"], row)
+        self._append_csv(self._csv_files["signals"], {**row, "key_features": json.dumps(row["key_features"], ensure_ascii=False)})
+        return int(row["id"])
 
     def list_signals(self, limit: int = 100) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM signals ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return [self._row_with_features(r) for r in rows]
+        return self._read_jsonl(self._json_files["signals"])[-max(1, limit) :][::-1]
 
     def save_trade(self, trade: dict[str, Any]) -> int:
-        with self._connect() as conn:
-            cur = conn.execute(
-                "INSERT INTO trades(symbol, side, quantity, entry_price, exit_price, pnl, fee, timestamp_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    trade["symbol"],
-                    trade["side"],
-                    float(trade["quantity"]),
-                    float(trade["entry_price"]),
-                    float(trade["exit_price"]),
-                    float(trade["pnl"]),
-                    float(trade["fee"]),
-                    int(trade["timestamp"]),
-                ),
-            )
-            return int(cur.lastrowid)
+        row = {
+            "id": self._next_id("trades"),
+            "symbol": trade["symbol"],
+            "side": trade["side"],
+            "quantity": float(trade["quantity"]),
+            "entry_price": float(trade["entry_price"]),
+            "exit_price": float(trade["exit_price"]),
+            "pnl": float(trade["pnl"]),
+            "fee": float(trade["fee"]),
+            "timestamp_ms": int(trade["timestamp"]),
+        }
+        self._append_jsonl(self._json_files["trades"], row)
+        self._append_csv(self._csv_files["trades"], row)
+        return int(row["id"])
 
     def list_trades(self, limit: int = 200) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM trades ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return [dict(r) for r in rows]
+        return self._read_jsonl(self._json_files["trades"])[-max(1, limit) :][::-1]
 
     def save_event(self, event_type: str, status: str, details: dict[str, Any]) -> int:
-        with self._connect() as conn:
-            cur = conn.execute(
-                "INSERT INTO execution_events(event_type, status, details_json) VALUES (?, ?, ?)",
-                (event_type, status, json.dumps(details)),
-            )
-            return int(cur.lastrowid)
+        row = {
+            "id": self._next_id("events"),
+            "event_type": event_type,
+            "status": status,
+            "details": details,
+            "created_at": self._now_iso(),
+        }
+        self._append_jsonl(self._json_files["events"], row)
+        self._append_csv(self._csv_files["events"], {**row, "details": json.dumps(details, ensure_ascii=False)})
+        return int(row["id"])
 
     def list_events(self, limit: int = 200) -> list[dict[str, Any]]:
-        with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM execution_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        return [{**dict(r), "details": json.loads(r["details_json"])} for r in rows]
+        return self._read_jsonl(self._json_files["events"])[-max(1, limit) :][::-1]
 
-    @staticmethod
-    def _row_with_payload(row: sqlite3.Row) -> dict[str, Any]:
-        data = dict(row)
-        data["payload"] = json.loads(data.pop("payload_json"))
-        return data
 
-    @staticmethod
-    def _row_with_features(row: sqlite3.Row) -> dict[str, Any]:
-        data = dict(row)
-        data["key_features"] = json.loads(data.pop("key_features_json"))
-        return data
+# backward-compatible alias
+SqliteRepository = LocalFileRepository

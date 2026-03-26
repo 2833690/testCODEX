@@ -53,13 +53,15 @@ class TradingSettings(BaseModel):
 
 
 class StrategySettings(BaseModel):
-    name: Literal["ema_crossover", "mean_reversion", "breakout"] = "ema_crossover"
+    name: Literal["ema_crossover", "mean_reversion", "breakout", "volatility_breakout", "regime_filter"] = "ema_crossover"
     timeframe: str = "1m"
     symbol: str = "BTC/USDT"
 
 
 class StorageSettings(BaseModel):
-    sqlite_path: str = "var/trading_platform.db"
+    storage_dir: str = "storage"
+    datasets_dir: str = "storage/datasets"
+    reports_dir: str = "storage/reports"
     persist_signals: bool = True
     persist_trades: bool = True
     persist_runs: bool = True
