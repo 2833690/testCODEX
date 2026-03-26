@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import csv
 import io
+from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.backtest.analysis import (
     equity_curve_diagnostics,
@@ -46,6 +48,8 @@ paper_job = PaperTradingJob(service=service)
 backtest_runs: list[dict] = []
 
 app = FastAPI(title=settings.app_name)
+UI_DIR = Path(__file__).with_name("static")
+app.mount("/ui/assets", StaticFiles(directory=UI_DIR), name="ui-assets")
 
 
 def envelope(data: dict | list, message: str = "ok") -> dict:
@@ -70,6 +74,16 @@ def _serialize_step_result(step_result: dict) -> dict:
 @app.get("/health")
 def health() -> dict[str, str]:
     return envelope({"mode": settings.trading.mode, "live_enabled": settings.trading.live_trading_enabled, "kill_switch_enabled": settings.trading.kill_switch_enabled})
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/ui")
+
+
+@app.get("/ui")
+def web_ui() -> FileResponse:
+    return FileResponse(UI_DIR / "index.html")
 
 
 @app.get("/config")

@@ -65,6 +65,9 @@ scripts/
 
 ## API endpoints
 
+- `GET /` (redirects to `/ui`)
+- `GET /ui` (built-in web console for paper/backtest/research actions)
+- `GET /ui/assets/*` (static JS/CSS for the web console)
 - `GET /health`
 - `GET /config`
 - `GET /strategies`
@@ -93,6 +96,8 @@ scripts/
 
 All endpoints return dashboard-friendly envelopes:
 `{"status":"ok","message":"...","data":{...}}`.
+
+The built-in web console (`/ui`) calls these same endpoints so operators can run paper trading, backtests, and diagnostics directly from a browser without writing custom frontend code.
 
 ## Quick start
 
