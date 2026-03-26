@@ -34,7 +34,7 @@ from app.utils.logging import configure_logging
 
 configure_logging()
 settings = get_settings()
-repository = SqliteRepository(settings.storage.sqlite_path)
+repository = SqliteRepository(settings.storage.storage_dir)
 
 
 def _audit_event(event_type: str, status: str, details: dict) -> None:
@@ -267,7 +267,7 @@ def list_audit_events(limit: int = 100) -> dict:
 def compare_backtests() -> dict:
     candles = exchange.fetch_ohlcv(settings.strategy.symbol, settings.strategy.timeframe, limit=500)
     splits = split_walk_forward(candles)
-    universe = ["ema_crossover", "mean_reversion", "breakout"]
+    universe = ["ema_crossover", "mean_reversion", "breakout", "volatility_breakout", "regime_filter"]
     metrics_by_strategy: dict[str, dict[str, float]] = {}
 
     for name in universe:

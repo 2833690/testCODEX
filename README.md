@@ -1,205 +1,35 @@
-# Reliable Crypto Bot (сначала paper trading)
+# Локальная платформа исследования и автоматизации крипто-стратегий
 
-Production-oriented фреймворк для алгоритмической торговли на Binance (по умолчанию) с архитектурой адаптеров для расширения под Bybit.
+Платформа для локального исследования рынка, бэктестов, walk-forward анализа, paper trading и безопасного auto/live execution (live по умолчанию отключен).
 
-## Безопасные настройки по умолчанию
+## Что реализовано
+- Полностью локальная работа: файлы в `storage/` (JSON/CSV/Parquet), без PostgreSQL/MySQL/Redis.
+- Data layer: импорт CSV, очистка, нормализация символов, версионирование датасетов, ресемплинг.
+- Стратегии: `Trend Following Breakout`, `Mean Reversion`, `Volatility Breakout`, `Regime Filter`.
+- Честный backtest с next-bar исполнением, fee/slippage/spread/latency/partial fill.
+- Optimization и research API: split, walk-forward, sensitivity, stability.
+- Risk engine с обязательными pre-trade проверками.
+- Paper trading с restart-safe хранением в файлах.
+- GUI на Streamlit (11 вкладок).
+- Экспорт отчётов в JSON/CSV/HTML.
 
-- **Режим по умолчанию: paper trading**.
-- **Live trading включается только feature-флагом и по умолчанию отключен**.
-- Никаких секретов в коде. Используйте переменные окружения из `.env`.
-- Бэктест учитывает **комиссии, спред, проскальзывание, задержку и частичное исполнение**.
-- Метрики стратегий рассчитываются после учета издержек и ранжируются по риск-скорректированной устойчивости.
-- Все входные ордера проходят обязательные риск-проверки.
-
-## Архитектура
-
-```text
-app/
-  api/            Эндпоинты FastAPI
-  config/         Настройки и валидация Pydantic
-  core/           Сборка и оркестрация бота
-  exchange/       Адаптеры CCXT + симуляция
-  data/           Загрузка OHLCV, валидация, абстракция feed/трансформации
-  strategies/     Чистые модули стратегий (без обращений к бирже)
-  risk/           Обязательные pre-trade риск-проверки и sizing
-  execution/      Преобразование signal -> order
-  portfolio/      Состояние портфеля/счета
-  backtest/       Движок бэктеста, метрики, исследовательская аналитика
-  paper/          Paper broker и оркестрация paper-джобы
-  models/         Общие типизированные доменные объекты
-  utils/          Логирование, индикаторы и утилиты рыночных режимов
-tests/
-  unit/
-  integration/
-scripts/
-  run_paper.py
-  run_backtest.py
-```
-
-## Исправленные результаты senior-quant аудита
-
-### Сниженные скрытые риски
-
-- **Lookahead bias**: исполнения в бэктесте используют next-bar стиль с настраиваемой задержкой в барах.
-- **Риск утечки данных**: walk-forward фолды задаются явно и строго по времени.
-- **Нереалистичные исполнения**: модель издержек включает спред, проскальзывание, комиссии и ограничения частичных fill.
-- **Потеря сигналов из-за задержки**: pending-сигналы ставятся в очередь и исполняются только после созревания окна задержки (без перезаписи более поздними барами).
-- **Хрупкий sizing**: risk manager использует volatility-targeted масштабирование и проверку расстояния до стопа.
-- **Слабые risk-brakes**: порог confidence + cooldown в барах после серии убытков.
-- **Разрыв между research и execution**: общий путь execution/risk используется и в backtest, и в paper режиме.
-- Защитные проверки stop-loss/take-profit применяются на каждом новом баре до обработки сигнала.
-- **Корректный учет**: equity портфеля учитывает mark-to-market для открытых позиций, а realized PnL включает комиссии входа и выхода.
-- **Реалистичность издержек**: цены исполнения учитывают bid/ask сторону (покупка по ask, продажа по bid), затем проскальзывание и комиссии.
-- **Детерминированный аудит**: записи сделок в backtest/paper используют timestamp свечи, а не wall-clock время.
-
-### Улучшения исследовательского качества
-
-- Утилита walk-forward валидации.
-- Разделение на train/validation/test.
-- Сканирование чувствительности параметров.
-- Учет рыночного режима и волатильности в стратегических решениях.
-- Риск-скорректированный рейтинг (`sortino_like`, `calmar_like`, drawdown-aware score).
-- Диагностика качества сделок (payoff ratio, средние win/loss).
-- Диагностика equity (ulcer index, длительность просадки, recovery factor).
-- Анализ стабильности на downsampled timeframe прокси.
-
-## API эндпоинты
-
-- `GET /` (отдает веб-консоль)
-- `GET /ui` (встроенная веб-консоль для paper/backtest/research действий)
-- `GET /ui/assets/*` (статические JS/CSS для веб-консоли)
-- `GET /assets/*` (альтернативный путь к статике для совместимости)
-- `GET /health`
-- `GET /config`
-- `GET /strategies`
-- `GET /strategy`
-- `GET /market/latest`
-- `GET /signals/latest`
-- `GET /signals/history`
-- `GET /signals/persisted`
-- `GET /paper/status`
-- `GET /paper/runs`
-- `GET /positions`
-- `GET /trades`
-- `GET /metrics`
-- `GET /diagnostics`
-- `GET /events/audit`
-- `GET /favicon.ico`
-- `POST /paper/start?steps=5`
-- `POST /paper/stop`
-- `POST /backtest/run`
-- `GET /backtest/results`
-- `GET /reports/backtests/export?format=json|csv`
-- `POST /backtest/compare`
-- `POST /research/split`
-- `POST /research/walk-forward`
-- `POST /research/sensitivity`
-- `POST /research/stability`
-
-Все эндпоинты возвращают envelope-структуру:
-`{"status":"ok","message":"...","data":{...}}`.
-
-Встроенная веб-консоль (`/ui`) использует те же API, поэтому оператор может запускать paper trading, бэктесты и диагностику прямо из браузера без отдельного фронтенда.
-
-## Быстрый старт
-
+## Быстрый запуск
 ```bash
-cp .env.example .env
-make install
-make paper
-make backtest
-make api
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev,test]"
+streamlit run ui/streamlit_app.py
 ```
 
-Для локальных/CI-прогонов тестов сначала установите пакет, затем тестовые зависимости:
-
+API:
 ```bash
-pip install -e .
-pip install -e ".[test]"
-pytest
+uvicorn app.api.main:app --reload
 ```
 
-## Workflow бэктеста и research (безопасный по умолчанию)
+## Ключевая безопасность
+- Режим по умолчанию: `paper`.
+- `live` разрешается только при явном флаге.
+- Платформа не обещает прибыль и не использует “AI magic”.
 
-1. Подбирайте параметры кандидатов только на окнах train+validation.
-2. Оценивайте устойчивость стратегии только на test-фолдах.
-3. Анализируйте риск-скорректированный рейтинг, а не только сырую доходность.
-4. Проверяйте диагностику (`payoff_ratio`, `ulcer_index`, длительность просадки).
-5. Перед любым рассмотрением live режима проводите extended paper trading.
-
-## Workflow оператора (paper-first)
-
-1. Настройте `.env` из `.env.example` и оставьте `TRADING__MODE=paper`.
-2. Запустите `make backtest` и проверьте:
-   - риск-скорректированные метрики,
-   - диагностику просадки,
-   - распределение сделок/серий,
-   - breakdown по рыночным режимам.
-3. Запустите `make paper` и мониторьте:
-   - `/signals/latest`, `/signals/persisted`,
-   - `/diagnostics`,
-   - `/events/audit`.
-4. Экспортируйте историю прогонов через `/reports/backtests/export?format=csv` для сравнения.
-
-## Хранение данных и explainability
-
-- Прогоны, сигналы, сделки и события execution-аудита сохраняются в SQLite (`STORAGE__SQLITE_PATH`).
-- Каждый сигнал входа/выхода содержит:
-  - имя стратегии,
-  - направление,
-  - confidence,
-  - ключевые триггер-фичи,
-  - базу stop-loss,
-  - условие invalidation,
-  - короткое человекочитаемое объяснение.
-
-## Оставшийся риск переобучения
-
-- Многократная проверка большого числа комбинаций параметров на одном и том же историческом сэмпле может переобучать.
-- Downsampled timeframe прокси не заменяют полностью независимые рыночные режимы.
-- Текущий датасет малый и ближе к synthetic; production research требует более длинной и чистой рыночной истории.
-
-## Внешние предпосылки
-
-- Поддержка API бирж зависит от официальных реализаций `ccxt`.
-- Параметры издержек настраиваемые, по умолчанию консервативные; калибруйте под символ/площадку.
-- Модель funding/borrow cost пока не реализована (базовый spot-подход).
-
-## Статус live trading
-
-Live execution намеренно заглушен и заблокирован, пока явно не включено:
-
-- `TRADING__LIVE_TRADING_ENABLED=true`
-- `TRADING__MODE=live`
-
-### Обязательный pre-live чеклист (авто-аппрув не реализован)
-
-- Проверить соблюдение lot/tick/min-notional ограничений биржи на реальных метаданных рынка.
-- Проверить устойчивое восстановление жизненного цикла ордеров после рестартов.
-- Проверить kill-switch и circuit-breaker в аварийных сценариях.
-- Проверить timeout/retry поведение при сбоях биржи и частичной доступности.
-- Проверить предположения модели издержек (fees/slippage/spread/funding) на production-подобных данных.
-- Проверить лимиты capacity/impact и контроль просадки на длинных paper-прогонах.
-
-## Ограничения
-
-- Пример data feed — CSV-симуляция для детерминированной разработки.
-- WebSocket streaming пока отсутствует.
-- Валидация min-lot и min-notional из рыночных спецификаций биржи пока не реализована.
-- Задержка моделируется в барах, а не в миллисекундах; микроструктурная позиция в очереди не моделируется.
-- Модель partial-fill эвристическая и не основана на снимках глубины стакана.
-- Funding, borrow costs и overnight financing пока не моделируются.
-
-## Следующие безопасные шаги
-
-1. Добавить валидацию рыночных правил биржи (lot size, tick size, min notional).
-2. Добавить health checks live feed + stale data circuit breaker.
-3. Добавить более крупные мультисимвольные исторические датасеты с жестким train/validation/test протоколом.
-4. Добавить stress-тесты capacity/impact до live deployment.
-5. Добавить более богатую аналитику длительности сделок на event-level данных.
-
-## Оценка готовности к эксплуатации
-
-- **Безопасно для research:** Да, при консервативных предпосылках и явных предупреждениях о переобучении.
-- **Безопасно для paper trading:** Да, для контролируемых dry-run; мониторьте диагностику и логи отклоненных сделок.
-- **Пока не безопасно для live trading:** Да. Отсутствуют enforcement биржевых правил, полноценный устойчивый аудит и более глубокое моделирование market impact/funding.
+## Документация (RU)
+См. `docs/*.md`.
