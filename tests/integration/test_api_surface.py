@@ -1,5 +1,6 @@
 from app.api.main import (
     available_strategies,
+    favicon,
     latest_market_state,
     latest_signal,
     list_backtest_results,
@@ -30,8 +31,11 @@ def test_backtest_results_tracking() -> None:
 
 
 def test_web_interface_routes() -> None:
-    redirect_response = root()
-    assert redirect_response.headers.get("location") == "/ui"
+    root_response = root()
+    assert str(root_response.path).endswith("app/api/static/index.html")
 
     html_response = web_ui()
     assert str(html_response.path).endswith("app/api/static/index.html")
+
+    favicon_response = favicon()
+    assert favicon_response.status_code == 204

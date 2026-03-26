@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.backtest.analysis import (
@@ -50,6 +50,7 @@ backtest_runs: list[dict] = []
 app = FastAPI(title=settings.app_name)
 UI_DIR = Path(__file__).with_name("static")
 app.mount("/ui/assets", StaticFiles(directory=UI_DIR), name="ui-assets")
+app.mount("/assets", StaticFiles(directory=UI_DIR), name="assets")
 
 
 def envelope(data: dict | list, message: str = "ok") -> dict:
@@ -77,13 +78,18 @@ def health() -> dict[str, str]:
 
 
 @app.get("/")
-def root() -> RedirectResponse:
-    return RedirectResponse(url="/ui")
+def root() -> FileResponse:
+    return FileResponse(UI_DIR / "index.html")
 
 
 @app.get("/ui")
 def web_ui() -> FileResponse:
     return FileResponse(UI_DIR / "index.html")
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/config")
