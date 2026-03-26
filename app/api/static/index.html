@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reliable Crypto Bot Dashboard</title>
+  <link rel="stylesheet" href="/ui/assets/styles.css" />
+</head>
+<body>
+  <h1>Reliable Crypto Bot Web Console</h1>
+  <p class="muted">Paper trading by default. Live trading stays feature-flagged.</p>
+  <div id="safety" class="warn">Loading safety status...</div>
+
+  <div class="grid">
+    <section class="card">
+      <h3>Paper Trading</h3>
+      <button data-method="POST" data-url="/paper/start?steps=10">Run 10 steps</button>
+      <button class="secondary" data-method="POST" data-url="/paper/stop">Stop</button>
+      <button class="secondary" data-method="GET" data-url="/paper/status">Status</button>
+      <button class="secondary" data-method="GET" data-url="/paper/runs">Runs</button>
+    </section>
+
+    <section class="card">
+      <h3>Backtesting & Research</h3>
+      <button data-method="POST" data-url="/backtest/run">Backtest</button>
+      <button class="secondary" data-method="POST" data-url="/backtest/compare">Compare</button>
+      <button class="secondary" data-method="POST" data-url="/research/split">Split</button>
+      <button class="secondary" data-method="POST" data-url="/research/walk-forward">Walk-forward</button>
+      <button class="secondary" data-method="POST" data-url="/research/sensitivity">Sensitivity</button>
+      <button class="secondary" data-method="POST" data-url="/research/stability">Stability</button>
+    </section>
+
+    <section class="card">
+      <h3>Market & Signals</h3>
+      <button data-method="GET" data-url="/market/latest">Latest market</button>
+      <button class="secondary" data-method="GET" data-url="/signals/latest">Latest signal</button>
+      <button class="secondary" data-method="GET" data-url="/signals/history?limit=25">Signal history</button>
+      <button class="secondary" data-method="GET" data-url="/positions">Positions</button>
+      <button class="secondary" data-method="GET" data-url="/trades">Trades</button>
+      <button class="secondary" data-method="GET" data-url="/diagnostics">Diagnostics</button>
+    </section>
+  </div>
+
+  <h3>Response</h3>
+  <pre id="output">Waiting for action...</pre>
+
+  <script src="/ui/assets/app.js" defer></script>
+</body>
+</html>

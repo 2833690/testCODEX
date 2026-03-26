@@ -3,7 +3,9 @@ from app.api.main import (
     latest_market_state,
     latest_signal,
     list_backtest_results,
+    root,
     run_backtest,
+    web_ui,
 )
 
 
@@ -25,3 +27,11 @@ def test_backtest_results_tracking() -> None:
     results = list_backtest_results()
     assert results["data"]["in_memory_count"] >= 1
     assert len(results["data"]["recent"]) >= 1
+
+
+def test_web_interface_routes() -> None:
+    redirect_response = root()
+    assert redirect_response.headers.get("location") == "/ui"
+
+    html_response = web_ui()
+    assert str(html_response.path).endswith("app/api/static/index.html")
